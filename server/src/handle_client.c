@@ -8,6 +8,7 @@
 #include <pthread.h>
 #include "../include/handle_client.h"
 
+
 void* handle_client(void* client_socket_ptr) {
     if (client_socket_ptr == NULL) {
         return NULL;
@@ -74,6 +75,11 @@ void* handle_client(void* client_socket_ptr) {
 
 
 int create_conection(char* host, int port) {
+    if (host == NULL || strlen(host) == 0) {
+        fprintf(stderr, "Host is empty or null\n");
+        return -1;
+    }
+
     struct addrinfo hints, *res;
     int sock;
 
@@ -105,6 +111,7 @@ int create_conection(char* host, int port) {
     }
 
     freeaddrinfo(res);
-    
+
+    printf("Connected to %s:%d\n", host, port);
     return sock;
 }
