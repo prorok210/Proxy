@@ -5,9 +5,11 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <netinet/tcp.h>
 #include <pthread.h>
 #include "../include/handle_client.h"
 
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void* handle_client(void* client_socket_ptr) {
     if (client_socket_ptr == NULL) {
@@ -16,57 +18,104 @@ void* handle_client(void* client_socket_ptr) {
     int client_socket = *((int*)client_socket_ptr);
     free(client_socket_ptr);
 
-    char buffer[MAX_BUFFER_SIZE], method[8], url[2048], protocol[10];
+    int flag = 1;
+    if (setsockopt(client_socket, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(int)) < 0) {
+        perror("setsockopt(TCP_NODELAY) failed");
+        close(client_socket);
+        return NULL;
+    }
+
+    char buffer[MAX_BUFFER_SIZE], method[8], url[2048];
     char host[1024];
     int port = CLIENT_PORT;
 
+    
     while (1) {
+        // pthread_mutex_lock(&mutex);
         ssize_t bytes_received = recv(client_socket, buffer, MAX_BUFFER_SIZE, 0);
         if (bytes_received < 0) {
             perror("recv() failed");
+            break;
+        }
+        if (bytes_received == 0) {
             break;
         }
         buffer[bytes_received] = '\0';
 
         printf("Received: %s\n", buffer);
 
-        sscanf(buffer, "%s %s %s", method, url, protocol);
-        printf("Method: %s\nURL: %s\nProtocol: %s\n", method, url, protocol);
-
-        char* host_start = strstr(url, "://");
-        if (host_start) {
-            host_start += 3;
-        } else {
-            host_start = url;
-        }
-        char* host_end = strchr(host_start, '/');
-        if (host_end) {
-            *host_end = '\0';
-            strcpy(host, host_start);
-            *host_end = '/';
-        } else {
-            strcpy(host, host_start);
+        if (sscanf(buffer, "%s %s", method, url) != 2) {
+            fprintf(stderr, "Invalid request format\n");
+            continue;
         }
 
-        int destination_server = create_conection(host, port);
-        if (destination_server < 0) {
-            perror("Failed to create connection to destination server");
-            return NULL;
-        }
-
-        send(destination_server, buffer, bytes_received, 0);
-
-        while (1) {
-            bytes_received = recv(destination_server, buffer, MAX_BUFFER_SIZE, 0);
-            if (bytes_received <= 0) {
-                break;
+        if (strcmp(method, "CONNECT") == 0) {
+            sscanf(url, "%1023[^:]:%d", host, &port);
+            printf("URL: %s\n", url);
+            // Установите туннель и передайте данные
+            int destination_server = create_connection(host, port);
+            if (destination_server < 0) {
+                perror("Failed to create connection to destination server");
+                continue;
             }
-            send(client_socket, buffer, bytes_received, 0);
-        }
+            // Отправьте ответ об установлении туннеля
+            char response[] = "HTTP/1.1 200 Connection Established\r\n\r\n";
+            if (send(client_socket, response, sizeof(response) - 1, 0) < 0) {
+                perror("Failed to send response to client");
+                close(destination_server);
+                continue;
+            }
 
+            // Передача данных между клиентом и сервером
+            while (1) {
+                bytes_received = recv(client_socket, buffer, MAX_BUFFER_SIZE, 0);
+                if (bytes_received <= 0) {
+                    if (bytes_received < 0) {
+                        perror("recv() failed");
+                    }
+                    break;
+                }
+                printf("Запрос %s\n", buffer);
+                ssize_t bytes_sent = send(destination_server, buffer, bytes_received, 0);
+                if (bytes_sent < 0) {
+                    perror("Failed to send data to destination server");
+                    break;
+                }
+            }
+
+            close(destination_server);
+            printf("Tunnel closed\n");
+        } else {
+            // Для HTTP-запросов
+            printf("Обратно\n");
+            sscanf(url, "http://%1023[^:]:%d", host, &port);
+            printf("host: %s, port: %d", host, port);
+            int destination_server = create_connection(host, port);
+            if (destination_server < 0) {
+                perror("Failed to create connection to destination server");
+                continue;
+            }
+
+            // Перенаправление запроса к целевому серверу
+            send(destination_server, buffer, bytes_received, 0);
+            printf("Перенаправдение к серверу назначения: %s\n", buffer);
+
+            // Передача ответа обратно клиенту
+            while (1) {
+                bytes_received = recv(destination_server, buffer, MAX_BUFFER_SIZE, 0);
+                if (bytes_received <= 0) {
+                    break;
+                }
+                printf("Передача обратно клиенту: %s\n", buffer);
+                send(client_socket, buffer, bytes_received, 0);
+            }
+
+        shutdown(destination_server, SHUT_RDWR);
         close(destination_server);
-        memset(buffer, 0, MAX_BUFFER_SIZE);
+        // pthread_mutex_unlock(&mutex);
+        }   
     }
+    
 
     close(client_socket);
     return NULL;
@@ -74,7 +123,7 @@ void* handle_client(void* client_socket_ptr) {
 }
 
 
-int create_conection(char* host, int port) {
+int create_connection(char* host, int port) {
     if (host == NULL || strlen(host) == 0) {
         fprintf(stderr, "Host is empty or null\n");
         return -1;
@@ -99,8 +148,13 @@ int create_conection(char* host, int port) {
     sock = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
     if (sock < 0) {
         perror("socket() failed");
+        close(sock);
         freeaddrinfo(res);
         return -1;
+    }
+    int flag = 1;
+    if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, (char *)&flag, sizeof(int)) < 0) {
+        perror("setsockopt(TCP_NODELAY) failed");
     }
 
     if (connect(sock, res->ai_addr, res->ai_addrlen) < 0) {

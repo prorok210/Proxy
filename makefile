@@ -1,6 +1,6 @@
 # Компилятор и флаги
 CC = gcc
-CFLAGS = -Iinclude -Wall -g
+CFLAGS = -Iinclude -Wall
 
 # Папки
 SRCDIR = server/src

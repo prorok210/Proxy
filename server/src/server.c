@@ -9,7 +9,7 @@
 #include "../include/handle_client.h"
 
 #define SERVER_PORT 8081
-#define MAX_CLIENTS 10
+#define MAX_CLIENTS 100
 
 
 int start_server() {
