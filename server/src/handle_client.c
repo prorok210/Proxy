@@ -120,13 +120,12 @@ int process_request(int client_socket, char* buffer, ssize_t bytes_received,
         }
         printf("CONNECT URL: %s\n", url);
 
-        // Установите туннель и передайте данные
         destination_server = create_connection(host, *port);
         if (destination_server < 0) {
             perror("Failed to create connection to destination server");
             return -1;
         }
-        // Отправьте ответ об установлении туннеля
+    
         const char response[] = "HTTP/1.1 200 Connection Established\r\n\r\n";
         if (send(client_socket, response, sizeof(response) - 1, 0) < 0) {
             perror("Failed to send response to client");
@@ -213,45 +212,3 @@ int tunnel_data(int client_socket, int server_socket) {
         }
     }
 }
-        
-        // Передача данных между клиентом и сервером
-    //     while (1) {
-    //         bytes_received = recv(client_socket, buffer, MAX_BUFFER_SIZE, 0);
-    //         if (bytes_received <= 0) {
-    //             if (bytes_received < 0) {
-    //                 perror("recv() failed");
-    //             }
-    //             break;
-    //         }
-    //         printf("Запрос %s\n", buffer);
-    //         ssize_t bytes_sent = send(destination_server, buffer, bytes_received, 0);
-    //         if (bytes_sent < 0) {
-    //             perror("Failed to send data to destination server");
-    //             break;
-    //         }
-    //     }
-    //     close(destination_server);
-    //     printf("Tunnel closed\n");
-        
-    // } else {
-    //     // Для HTTP-запросов
-    //     printf("Обратно\n");
-    //     sscanf(url, "http://%1023[^:]:%d", host, &port);
-    //     printf("host: %s, port: %d", host, port);
-    //     int destination_server = create_connection(host, port);
-    //     if (destination_server < 0) {
-    //         perror("Failed to create connection to destination server");
-    //         continue;
-    //     }
-    //     // Перенаправление запроса к целевому серверу
-    //     send(destination_server, buffer, bytes_received, 0);
-    //     printf("Перенаправдение к серверу назначения: %s\n", buffer);
-    //     // Передача ответа обратно клиенту
-    //     while (1) {
-    //         bytes_received = recv(destination_server, buffer, MAX_BUFFER_SIZE, 0);
-    //         if (bytes_received <= 0) {
-    //             break;
-    //         }
-    //         printf("Передача обратно клиенту: %s\n", buffer);
-    //         send(client_socket, buffer, bytes_received, 0);
-    //     }
