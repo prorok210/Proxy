@@ -5,6 +5,7 @@
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <signal.h>
 #include <pthread.h>
 #include "../include/handle_client.h"
 
@@ -78,7 +79,16 @@ int start_server() {
     return 0;
 }
 
+void signal_handler(int signum) {
+    // Обработка сигналов, например, для корректного завершения
+    printf("Caught signal %d. Exiting...\n", signum);
+    exit(signum);
+}
+
 int main() {
+    signal(SIGINT, signal_handler);
+    signal(SIGTERM, signal_handler);
+    signal(SIGPIPE, SIG_IGN);
     if (start_server() < 0) {
         return -1;
     }
