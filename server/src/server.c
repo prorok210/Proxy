@@ -12,6 +12,10 @@
 #define SERVER_PORT 8081
 #define MAX_CLIENTS 100
 
+const char* ALLOWED_HOSTS[] = {
+    "176.192.255.109"
+};
+
 
 int start_server() {
     printf("Starting server...\n");
@@ -52,8 +56,20 @@ int start_server() {
             perror("accept() failed");
             continue;
         }
-        
-        printf("Client connected\n");
+
+        int acc = 0;
+        for (size_t i = 0; i < sizeof(ALLOWED_HOSTS) / sizeof(ALLOWED_HOSTS[0]); i++) {
+            if (strcmp(inet_ntoa(client_addr.sin_addr), ALLOWED_HOSTS[i]) == 0) {
+                printf("Client connected from %s\n", inet_ntoa(client_addr.sin_addr));
+                acc = 1;
+                break;
+            }
+        }
+        if (!acc) {
+            printf("Client from %s is not allowed\n", inet_ntoa(client_addr.sin_addr));
+            close(client_socket);
+            continue;
+        }
 
         int *client_socket_ptr = (int*)malloc(sizeof(int));
         if (client_socket_ptr == NULL) {
